@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +32,24 @@ func getMemoryInfo() string {
 	runtime.ReadMemStats(&m)
 	return fmt.Sprintf("Memory (Go runtime):\nAlloc = %v MiB\nTotalAlloc = %v MiB\nSys = %v MiB\nNumGC = %v",
 		m.Alloc/1024/1024, m.TotalAlloc/1024/1024, m.Sys/1024/1024, m.NumGC)
+}
+
+func getDiskInfo() string {
+	path := "/"
+	if runtime.GOOS == "windows" {
+		path = "C:"
+	}
+
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return "Disk: N/A"
+	}
+
+	total := stat.Blocks * uint64(stat.Bsize)
+	free := stat.Bfree * uint64(stat.Bsize)
+
+	return fmt.Sprintf("Disk: %dGB free / %dGB Total", free/1024/1024/1024, total/1024/1024/1024)
 }
 
 func parseMemInfo(data string) string {
@@ -73,6 +92,8 @@ func main() {
 		fmt.Println(getSystemInfo())
 		fmt.Println("-------------------------")
 		fmt.Println(getMemoryInfo())
+		fmt.Println("-------------------------")
+		fmt.Println(getDiskInfo())
 		fmt.Println("-------------------------")
 
 		time.Sleep(2 * time.Second)
