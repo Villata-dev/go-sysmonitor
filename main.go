@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+const (
+	Reset  = "\033[0m"
+	Red    = "\033[31m"
+	Green  = "\033[32m"
+	Yellow = "\033[33m"
+)
+
 func getSystemInfo() string {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -19,19 +26,36 @@ func getSystemInfo() string {
 	return info
 }
 
+func Colorize(value, total uint64) string {
+	usage := float64(value) / float64(total) * 100
+	color := Green
+	if usage > 90 {
+		color = Red
+	} else if usage > 70 {
+		color = Yellow
+	}
+	return fmt.Sprintf("%s%.2f%%%s", color, usage, Reset)
+}
+
 func getMemoryInfo() string {
 	if runtime.GOOS == "linux" {
 		data, err := os.ReadFile("/proc/meminfo")
 		if err == nil {
-			return parseMemInfo(string(data))
+			totalMem, freeMem := parseMemInfo(string(data))
+			usedMem := totalMem - freeMem
+			return fmt.Sprintf("Memory: %d MiB free / %d MiB Total (Usage: %s)",
+				freeMem/1024, totalMem/1024, Colorize(usedMem, totalMem))
 		}
 	}
 
 	// Fallback for non-Linux systems or if /proc/meminfo is unreadable
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	return fmt.Sprintf("Memory (Go runtime):\nAlloc = %v MiB\nTotalAlloc = %v MiB\nSys = %v MiB\nNumGC = %v",
-		m.Alloc/1024/1024, m.TotalAlloc/1024/1024, m.Sys/1024/1024, m.NumGC)
+	totalMem := m.Sys / 1024 / 1024
+	usedMem := m.Alloc / 1024 / 1024
+	freeMem := totalMem - usedMem
+	return fmt.Sprintf("Memory: %d MiB free / %d MiB Total (Usage: %s)",
+		freeMem, totalMem, Colorize(usedMem, totalMem))
 }
 
 func getDiskInfo() string {
@@ -48,11 +72,13 @@ func getDiskInfo() string {
 
 	total := stat.Blocks * uint64(stat.Bsize)
 	free := stat.Bfree * uint64(stat.Bsize)
+	used := total - free
 
-	return fmt.Sprintf("Disk: %dGB free / %dGB Total", free/1024/1024/1024, total/1024/1024/1024)
+	return fmt.Sprintf("Disk: %dGB free / %dGB Total (Usage: %s)",
+		free/1024/1024/1024, total/1024/1024/1024, Colorize(used, total))
 }
 
-func parseMemInfo(data string) string {
+func parseMemInfo(data string) (uint64, uint64) {
 	lines := strings.Split(data, "\n")
 	var totalMem, freeMem uint64
 	for _, line := range lines {
@@ -77,7 +103,7 @@ func parseMemInfo(data string) string {
 			}
 		}
 	}
-	return fmt.Sprintf("Memory (System):\nTotal: %d MiB\nFree: %d MiB", totalMem/1024, freeMem/1024)
+	return totalMem, freeMem
 }
 
 func main() {
